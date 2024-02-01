@@ -8,6 +8,9 @@ import r.android.view.ViewGroup;
 import r.android.view.ViewParent;
 import r.android.util.Pools;
 import androidx.core.view.GravityCompat;
+import androidx.core.view.NestedScrollingParent2;
+import androidx.core.view.NestedScrollingParent3;
+import androidx.core.view.NestedScrollingParentHelper;
 import androidx.core.view.ViewCompat;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -15,7 +18,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-public class CoordinatorLayout extends ViewGroup {
+public class CoordinatorLayout extends ViewGroup implements NestedScrollingParent2, NestedScrollingParent3 {
   static final String TAG="CoordinatorLayout";
   private static final int TYPE_ON_INTERCEPT=0;
   private static final int TYPE_ON_TOUCH=1;
@@ -36,12 +39,16 @@ public class CoordinatorLayout extends ViewGroup {
   }
   private final List<View> mDependencySortedChildren=new ArrayList<>();
   private final DirectedAcyclicGraph<View> mChildDag=new DirectedAcyclicGraph<>();
+  private final int[] mBehaviorConsumed=new int[2];
+  private final int[] mNestedScrollingV2ConsumedCompat=new int[2];
   private boolean mDisallowInterceptReset;
   private boolean mIsAttachedToWindow;
   private int[] mKeylines;
+  private View mNestedScrollingTarget;
   private boolean mNeedsPreDrawListener;
   private WindowInsetsCompat mLastInsets;
   private boolean mDrawStatusBarBackground;
+  private final NestedScrollingParentHelper mNestedScrollingParentHelper=new NestedScrollingParentHelper(this);
   private int getKeyline(  int index){
     if (mKeylines == null) {
       Log.e(TAG,"No keylines defined for " + this + " - attempted index lookup "+ index);
@@ -573,6 +580,186 @@ releaseTempRect(childRect);
 releaseTempRect(desiredChildRect);
 }
 }
+public boolean onStartNestedScroll(View child,View target,int nestedScrollAxes){
+return onStartNestedScroll(child,target,nestedScrollAxes,ViewCompat.TYPE_TOUCH);
+}
+public boolean onStartNestedScroll(View child,View target,int axes,int type){
+boolean handled=false;
+final int childCount=getChildCount();
+for (int i=0; i < childCount; i++) {
+final View view=getChildAt(i);
+if (view.getVisibility() == View.GONE) {
+continue;
+}
+final LayoutParams lp=(LayoutParams)view.getLayoutParams();
+final Behavior viewBehavior=lp.getBehavior();
+if (viewBehavior != null) {
+final boolean accepted=viewBehavior.onStartNestedScroll(this,view,child,target,axes,type);
+handled|=accepted;
+lp.setNestedScrollAccepted(type,accepted);
+}
+ else {
+lp.setNestedScrollAccepted(type,false);
+}
+}
+return handled;
+}
+public void onNestedScrollAccepted(View child,View target,int axes){
+onNestedScrollAccepted(child,target,axes,ViewCompat.TYPE_TOUCH);
+}
+public void onNestedScrollAccepted(View child,View target,int axes,int type){
+mNestedScrollingParentHelper.onNestedScrollAccepted(child,target,axes,type);
+mNestedScrollingTarget=target;
+final int childCount=getChildCount();
+for (int i=0; i < childCount; i++) {
+final View view=getChildAt(i);
+final LayoutParams lp=(LayoutParams)view.getLayoutParams();
+if (!lp.isNestedScrollAccepted(type)) {
+continue;
+}
+final Behavior viewBehavior=lp.getBehavior();
+if (viewBehavior != null) {
+viewBehavior.onNestedScrollAccepted(this,view,child,target,axes,type);
+}
+}
+}
+public void onStopNestedScroll(View target){
+onStopNestedScroll(target,ViewCompat.TYPE_TOUCH);
+}
+public void onStopNestedScroll(View target,int type){
+mNestedScrollingParentHelper.onStopNestedScroll(target,type);
+final int childCount=getChildCount();
+for (int i=0; i < childCount; i++) {
+final View view=getChildAt(i);
+final LayoutParams lp=(LayoutParams)view.getLayoutParams();
+if (!lp.isNestedScrollAccepted(type)) {
+continue;
+}
+final Behavior viewBehavior=lp.getBehavior();
+if (viewBehavior != null) {
+viewBehavior.onStopNestedScroll(this,view,target,type);
+}
+lp.resetNestedScroll(type);
+lp.resetChangedAfterNestedScroll();
+}
+mNestedScrollingTarget=null;
+}
+public void onNestedScroll(View target,int dxConsumed,int dyConsumed,int dxUnconsumed,int dyUnconsumed){
+onNestedScroll(target,dxConsumed,dyConsumed,dxUnconsumed,dyUnconsumed,ViewCompat.TYPE_TOUCH);
+}
+public void onNestedScroll(View target,int dxConsumed,int dyConsumed,int dxUnconsumed,int dyUnconsumed,int type){
+onNestedScroll(target,dxConsumed,dyConsumed,dxUnconsumed,dyUnconsumed,ViewCompat.TYPE_TOUCH,mNestedScrollingV2ConsumedCompat);
+}
+public void onNestedScroll(View target,int dxConsumed,int dyConsumed,int dxUnconsumed,int dyUnconsumed,int type,int[] consumed){
+final int childCount=getChildCount();
+boolean accepted=false;
+int xConsumed=0;
+int yConsumed=0;
+for (int i=0; i < childCount; i++) {
+final View view=getChildAt(i);
+if (view.getVisibility() == GONE) {
+continue;
+}
+final LayoutParams lp=(LayoutParams)view.getLayoutParams();
+if (!lp.isNestedScrollAccepted(type)) {
+continue;
+}
+final Behavior viewBehavior=lp.getBehavior();
+if (viewBehavior != null) {
+mBehaviorConsumed[0]=0;
+mBehaviorConsumed[1]=0;
+viewBehavior.onNestedScroll(this,view,target,dxConsumed,dyConsumed,dxUnconsumed,dyUnconsumed,type,mBehaviorConsumed);
+xConsumed=dxUnconsumed > 0 ? Math.max(xConsumed,mBehaviorConsumed[0]) : Math.min(xConsumed,mBehaviorConsumed[0]);
+yConsumed=dyUnconsumed > 0 ? Math.max(yConsumed,mBehaviorConsumed[1]) : Math.min(yConsumed,mBehaviorConsumed[1]);
+accepted=true;
+}
+}
+consumed[0]+=xConsumed;
+consumed[1]+=yConsumed;
+if (accepted) {
+onChildViewsChanged(EVENT_NESTED_SCROLL);
+}
+}
+public void onNestedPreScroll(View target,int dx,int dy,int[] consumed){
+onNestedPreScroll(target,dx,dy,consumed,ViewCompat.TYPE_TOUCH);
+}
+public void onNestedPreScroll(View target,int dx,int dy,int[] consumed,int type){
+int xConsumed=0;
+int yConsumed=0;
+boolean accepted=false;
+final int childCount=getChildCount();
+for (int i=0; i < childCount; i++) {
+final View view=getChildAt(i);
+if (view.getVisibility() == GONE) {
+continue;
+}
+final LayoutParams lp=(LayoutParams)view.getLayoutParams();
+if (!lp.isNestedScrollAccepted(type)) {
+continue;
+}
+final Behavior viewBehavior=lp.getBehavior();
+if (viewBehavior != null) {
+mBehaviorConsumed[0]=0;
+mBehaviorConsumed[1]=0;
+viewBehavior.onNestedPreScroll(this,view,target,dx,dy,mBehaviorConsumed,type);
+xConsumed=dx > 0 ? Math.max(xConsumed,mBehaviorConsumed[0]) : Math.min(xConsumed,mBehaviorConsumed[0]);
+yConsumed=dy > 0 ? Math.max(yConsumed,mBehaviorConsumed[1]) : Math.min(yConsumed,mBehaviorConsumed[1]);
+accepted=true;
+}
+}
+consumed[0]=xConsumed;
+consumed[1]=yConsumed;
+if (accepted) {
+onChildViewsChanged(EVENT_NESTED_SCROLL);
+}
+}
+public boolean onNestedFling(View target,float velocityX,float velocityY,boolean consumed){
+boolean handled=false;
+final int childCount=getChildCount();
+for (int i=0; i < childCount; i++) {
+final View view=getChildAt(i);
+if (view.getVisibility() == GONE) {
+continue;
+}
+final LayoutParams lp=(LayoutParams)view.getLayoutParams();
+if (!lp.isNestedScrollAccepted(ViewCompat.TYPE_TOUCH)) {
+continue;
+}
+final Behavior viewBehavior=lp.getBehavior();
+if (viewBehavior != null) {
+handled|=viewBehavior.onNestedFling(this,view,target,velocityX,velocityY,consumed);
+}
+}
+if (handled) {
+onChildViewsChanged(EVENT_NESTED_SCROLL);
+}
+return handled;
+}
+public boolean onNestedPreFling(View target,float velocityX,float velocityY){
+boolean handled=false;
+final int childCount=getChildCount();
+for (int i=0; i < childCount; i++) {
+final View view=getChildAt(i);
+if (view.getVisibility() == GONE) {
+continue;
+}
+final LayoutParams lp=(LayoutParams)view.getLayoutParams();
+if (!lp.isNestedScrollAccepted(ViewCompat.TYPE_TOUCH)) {
+continue;
+}
+final Behavior viewBehavior=lp.getBehavior();
+if (viewBehavior != null) {
+handled|=viewBehavior.onNestedPreFling(this,view,target,velocityX,velocityY);
+}
+}
+return handled;
+}
+public int getNestedScrollAxes(){
+return mNestedScrollingParentHelper.getNestedScrollAxes();
+}
+public interface AttachedBehavior {
+Behavior getBehavior();
+}
 public static abstract class Behavior<V extends View> {
 public Behavior(){
 }
@@ -592,6 +779,54 @@ public boolean onMeasureChild(CoordinatorLayout parent,V child,int parentWidthMe
 return false;
 }
 public boolean onLayoutChild(CoordinatorLayout parent,V child,int layoutDirection){
+return false;
+}
+public boolean onStartNestedScroll(CoordinatorLayout coordinatorLayout,V child,View directTargetChild,View target,int axes){
+return false;
+}
+public boolean onStartNestedScroll(CoordinatorLayout coordinatorLayout,V child,View directTargetChild,View target,int axes,int type){
+if (type == ViewCompat.TYPE_TOUCH) {
+return onStartNestedScroll(coordinatorLayout,child,directTargetChild,target,axes);
+}
+return false;
+}
+public void onNestedScrollAccepted(CoordinatorLayout coordinatorLayout,V child,View directTargetChild,View target,int axes){
+}
+public void onNestedScrollAccepted(CoordinatorLayout coordinatorLayout,V child,View directTargetChild,View target,int axes,int type){
+if (type == ViewCompat.TYPE_TOUCH) {
+onNestedScrollAccepted(coordinatorLayout,child,directTargetChild,target,axes);
+}
+}
+public void onStopNestedScroll(CoordinatorLayout coordinatorLayout,V child,View target){
+}
+public void onStopNestedScroll(CoordinatorLayout coordinatorLayout,V child,View target,int type){
+if (type == ViewCompat.TYPE_TOUCH) {
+onStopNestedScroll(coordinatorLayout,child,target);
+}
+}
+public void onNestedScroll(CoordinatorLayout coordinatorLayout,V child,View target,int dxConsumed,int dyConsumed,int dxUnconsumed,int dyUnconsumed){
+}
+public void onNestedScroll(CoordinatorLayout coordinatorLayout,V child,View target,int dxConsumed,int dyConsumed,int dxUnconsumed,int dyUnconsumed,int type){
+if (type == ViewCompat.TYPE_TOUCH) {
+onNestedScroll(coordinatorLayout,child,target,dxConsumed,dyConsumed,dxUnconsumed,dyUnconsumed);
+}
+}
+public void onNestedScroll(CoordinatorLayout coordinatorLayout,V child,View target,int dxConsumed,int dyConsumed,int dxUnconsumed,int dyUnconsumed,int type,int[] consumed){
+consumed[0]+=dxUnconsumed;
+consumed[1]+=dyUnconsumed;
+onNestedScroll(coordinatorLayout,child,target,dxConsumed,dyConsumed,dxUnconsumed,dyUnconsumed,type);
+}
+public void onNestedPreScroll(CoordinatorLayout coordinatorLayout,V child,View target,int dx,int dy,int[] consumed){
+}
+public void onNestedPreScroll(CoordinatorLayout coordinatorLayout,V child,View target,int dx,int dy,int[] consumed,int type){
+if (type == ViewCompat.TYPE_TOUCH) {
+onNestedPreScroll(coordinatorLayout,child,target,dx,dy,consumed);
+}
+}
+public boolean onNestedFling(CoordinatorLayout coordinatorLayout,V child,View target,float velocityX,float velocityY,boolean consumed){
+return false;
+}
+public boolean onNestedPreFling(CoordinatorLayout coordinatorLayout,V child,View target,float velocityX,float velocityY){
 return false;
 }
 public boolean getInsetDodgeRect(CoordinatorLayout parent,V child,Rect rect){
@@ -657,6 +892,28 @@ return mLastChildRect;
 }
 boolean checkAnchorChanged(){
 return mAnchorView == null && mAnchorId != View.NO_ID;
+}
+void resetNestedScroll(int type){
+setNestedScrollAccepted(type,false);
+}
+void setNestedScrollAccepted(int type,boolean accept){
+switch (type) {
+case ViewCompat.TYPE_TOUCH:
+mDidAcceptNestedScrollTouch=accept;
+break;
+case ViewCompat.TYPE_NON_TOUCH:
+mDidAcceptNestedScrollNonTouch=accept;
+break;
+}
+}
+boolean isNestedScrollAccepted(int type){
+switch (type) {
+case ViewCompat.TYPE_TOUCH:
+return mDidAcceptNestedScrollTouch;
+case ViewCompat.TYPE_NON_TOUCH:
+return mDidAcceptNestedScrollNonTouch;
+}
+return false;
 }
 boolean getChangedAfterNestedScroll(){
 return mDidChangeAfterNestedScroll;
@@ -744,6 +1001,16 @@ mKeylines=keyLines;
 }
 LayoutParams getResolvedLayoutParams(View child){
 final LayoutParams result=(LayoutParams)child.getLayoutParams();
+if (!result.mBehaviorResolved) {
+if (child instanceof AttachedBehavior) {
+Behavior attachedBehavior=((AttachedBehavior)child).getBehavior();
+if (attachedBehavior == null) {
+Log.e(TAG,"Attached behavior class is null");
+}
+result.setBehavior(attachedBehavior);
+result.mBehaviorResolved=true;
+}
+}
 result.mBehaviorResolved=true;
 return result;
 }
