@@ -1,3 +1,18 @@
+//start - license
+/*
+ * Copyright (c) 2025 Ashera Cordova
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+//end - license
 /*
  * Copyright 2018 The Android Open Source Project
  *
@@ -43,7 +58,7 @@ public final class DirectedAcyclicGraph<T> {
     private final ArrayList<T> mSortResult = new ArrayList<>();
     private final HashSet<T> mSortTmpMarked = new HashSet<>();
 
-    /**
+   /**
      * Add a node to the graph.
      *
      * <p>If the node already exists in the graph then this method is a no-op.</p>
@@ -56,14 +71,14 @@ public final class DirectedAcyclicGraph<T> {
         }
     }
 
-    /**
+   /**
      * Returns true if the node is already present in the graph, false otherwise.
      */
     public boolean contains(@NonNull T node) {
         return mGraph.containsKey(node);
     }
 
-    /**
+   /**
      * Add an edge to the graph.
      *
      * <p>Both the given nodes should already have been added to the graph through
@@ -88,7 +103,7 @@ public final class DirectedAcyclicGraph<T> {
         edges.add(incomingEdge);
     }
 
-    /**
+   /**
      * Get any incoming edges from the given node.
      *
      * @return a new list containing any incoming edges, or {@code null} if there are none
@@ -103,7 +118,7 @@ public final class DirectedAcyclicGraph<T> {
         }
     }
 
-    /**
+   /**
      * Get any incoming edges from the given node.
      *
      * @return a list containing any incoming edges, or null if there are none.
@@ -113,7 +128,7 @@ public final class DirectedAcyclicGraph<T> {
         return mGraph.get(node);
     }
 
-    /**
+   /**
      * Get any outgoing edges for the given node (i.e. nodes which have an incoming edge
      * from the given node).
      *
@@ -134,7 +149,7 @@ public final class DirectedAcyclicGraph<T> {
         return result;
     }
 
-    /**
+   /**
      * Checks whether we have any outgoing edges for the given node (i.e. nodes which have
      * an incoming edge from the given node).
      *
@@ -151,7 +166,7 @@ public final class DirectedAcyclicGraph<T> {
         return false;
     }
 
-    /**
+   /**
      * Clears the internal graph, and releases resources to pools.
      */
     public void clear() {
@@ -164,7 +179,7 @@ public final class DirectedAcyclicGraph<T> {
         mGraph.clear();
     }
 
-    /**
+   /**
      * Returns a topologically sorted list of the nodes in this graph. This uses the DFS algorithm
      * as described by Cormen et al. (2001). If this graph contains cyclic dependencies then this
      * method will throw a {@link RuntimeException}.
@@ -208,7 +223,7 @@ public final class DirectedAcyclicGraph<T> {
         result.add(node);
     }
 
-    /**
+   /**
      * Returns the size of the graph
      */
     int size() {
